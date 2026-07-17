@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#006644" />
+  <title>Our Expenses</title>
+  <style>
+    :root{
+      --forest:#006644; --forest-mid:#00875a; --forest-dark:#004d33;
+      --tint:#e6f2ee; --bg:#f7f8f7; --ink:#111a16; --muted:#6b756f;
+      --card:#ffffff; --line:#e7ebe9; --owe:#a8321f; --owe-tint:#f7e9e6;
+    }
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    html,body{ -webkit-tap-highlight-color:transparent; }
+    body{
+      background:var(--bg); color:var(--ink); min-height:100vh;
+      font-family:-apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .wrap{ max-width:460px; margin:0 auto; }
+    .tabular{ font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+    .hidden{ display:none !important; }
+    button{ font-family:inherit; cursor:pointer; border:none; background:none; }
+
+    /* ---- Generic screens ---- */
+    .screen{ padding:22px; }
+    .notice{
+      max-width:400px; margin:16vh auto 0; text-align:center; padding:0 24px;
+    }
+    .notice .ic{ font-size:40px; }
+    .notice h2{ font-size:19px; font-weight:700; margin-top:14px; }
+    .notice p{ font-size:14px; color:var(--muted); margin-top:10px; line-height:1.5; }
+
+    /* ---- Auth ---- */
+    #authScreen{ max-width:400px; margin:0 auto; padding:14vh 26px 40px; }
+    .logo{
+      width:56px; height:56px; border-radius:16px; margin:0 auto 18px;
+      background:linear-gradient(150deg,var(--forest-mid),var(--forest-dark));
+      display:flex; align-items:center; justify-content:center;
+    }
+    .logo svg{ width:32px; height:32px; }
+    #authScreen h1{ font-size:23px; font-weight:700; text-align:center; letter-spacing:-.01em; }
+    #authScreen .lead{ font-size:14px; color:var(--muted); text-align:center; margin-top:8px; }
+    .field{ margin-top:16px; }
+    .field label{ display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; }
+    .field input{
+      width:100%; background:#fff; border:1px solid var(--line); border-radius:13px;
+      padding:14px; font-size:16px; color:var(--ink); outline:none;
+    }
+    .field input:focus{ border-color:var(--forest); box-shadow:0 0 0 3px rgba(0,102,68,.14); }
+    .btn-primary{
+      width:100%; margin-top:20px; background:var(--forest); color:#fff;
+      font-size:16px; font-weight:600; padding:14px; border-radius:13px;
+      box-shadow:0 6px 16px -6px rgba(0,102,68,.5);
+    }
+    .btn-primary:active{ background:var(--forest-dark); }
+    .btn-primary:disabled{ opacity:.6; }
+    .switch{ text-align:center; margin-top:18px; font-size:13.5px; color:var(--muted); }
+    .switch b{ color:var(--forest); font-weight:600; }
+    .err{ color:var(--owe); font-size:13px; text-align:center; margin-top:14px; min-height:18px; }
+
+    /* ---- App header / balance hero ---- */
+    header{
+      background:linear-gradient(158deg,var(--forest-mid),var(--forest-dark));
+      color:#fff; padding:calc(env(safe-area-inset-top) + 26px) 22px 26px;
+      border-radius:0 0 24px 24px; position:relative;
+    }
+    .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+    .topbar .title{ font-size:13px; font-weight:600; color:rgba(230,242,238,.85); }
+    .signout{ font-size:13px; color:rgba(255,255,255,.85); font-weight:600; }
+    .balance-lead{ font-size:14px; color:rgba(230,242,238,.9); }
+    .balance-amt{ font-size:42px; font-weight:700; line-height:1; margin-top:6px; }
+    .balance-note{ font-size:12.5px; color:rgba(230,242,238,.8); margin-top:10px; }
+    .actions{ display:flex; gap:10px; margin-top:20px; }
+    .act{
+      flex:1; text-align:center; font-size:14px; font-weight:650; padding:12px;
+      border-radius:13px; background:rgba(255,255,255,.16); color:#fff;
+    }
+    .act:active{ background:rgba(255,255,255,.28); }
+    .act.solid{ background:#fff; color:var(--forest); }
+
+    /* ---- Feed ---- */
+    main{ padding:20px 18px calc(env(safe-area-inset-bottom) + 40px); }
+    .daygroup{ margin-bottom:20px; }
+    .dayhead{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 4px 10px; }
+    .item{
+      display:flex; align-items:center; gap:13px; background:var(--card);
+      border:1px solid var(--line); border-radius:16px; padding:13px; margin-bottom:9px;
+    }
+    .item .ic{
+      width:42px; height:42px; border-radius:12px; flex:none; background:var(--tint);
+      display:flex; align-items:center; justify-content:center; font-size:20px;
+    }
+    .item .mid{ flex:1; min-width:0; }
+    .item .desc{ font-size:15px; font-weight:600; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .item .meta{ font-size:12px; color:var(--muted); margin-top:3px; }
+    .item .right{ text-align:right; flex:none; }
+    .item .amt{ font-size:15px; font-weight:700; }
+    .item .share{ font-size:11px; color:var(--muted); margin-top:2px; }
+    .item.settle .ic{ background:var(--owe-tint); }
+    .del{ font-size:11px; color:var(--muted); margin-top:4px; }
+    .del:active{ color:var(--owe); }
+    .empty{ text-align:center; padding:12vh 24px; color:var(--muted); }
+    .empty .ic{ font-size:38px; }
+    .empty p{ margin-top:12px; font-size:14px; line-height:1.5; }
+
+    /* ---- Modal (bottom sheet) ---- */
+    .backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.42); backdrop-filter:blur(2px); z-index:50; display:flex; align-items:flex-end; justify-content:center; }
+    .sheet{ background:#fff; width:100%; max-width:460px; border-radius:22px 22px 0 0; padding:22px 22px calc(env(safe-area-inset-bottom) + 22px); }
+    .sheet h3{ font-size:17px; font-weight:700; margin-bottom:16px; }
+    .seg{ display:flex; gap:6px; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:4px; }
+    .seg button{ flex:1; padding:9px; font-size:13px; font-weight:600; border-radius:9px; color:var(--muted); }
+    .seg button.on{ background:#fff; color:var(--forest); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .chips{ display:flex; flex-wrap:wrap; gap:7px; }
+    .chip{ font-size:13px; font-weight:500; padding:8px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--ink); }
+    .chip.on{ background:var(--tint); border-color:var(--forest); color:var(--forest); font-weight:600; }
+    .sheet .field{ margin-top:14px; }
+    .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
+    .btn-ghost{ flex:1; padding:13px; border-radius:12px; font-size:15px; font-weight:600; color:var(--muted); background:var(--bg); }
+    .btn-save{ flex:2; padding:13px; border-radius:12px; font-size:15px; font-weight:600; color:#fff; background:var(--forest); }
+    .btn-save:active{ background:var(--forest-dark); }
+
+    /* ---- Toast ---- */
+    #toast{ position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 12px); transform:translateX(-50%) translateY(-140%);
+      background:#111a16; color:#fff; font-size:13.5px; font-weight:500; padding:12px 16px; border-radius:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,.3); z-index:80; max-width:340px; transition:transform .35s cubic-bezier(.2,.9,.3,1); }
+    #toast.show{ transform:translateX(-50%) translateY(0); }
+    #toast .t-ic{ margin-right:6px; }
+
+    /* ---- Views + bottom tab nav ---- */
+    .view.hidden{ display:none !important; }
+    #appScreen main{ padding-bottom:calc(env(safe-area-inset-bottom) + 96px); }
+    nav.tabbar{
+      position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+      width:100%; max-width:460px; z-index:60;
+      background:rgba(255,255,255,.97); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+      border-top:1px solid var(--line); display:flex;
+      padding:6px 4px calc(env(safe-area-inset-bottom) + 6px);
+    }
+    nav.tabbar button{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px; color:var(--muted); font-size:10.5px; font-weight:600; }
+    nav.tabbar button svg{ width:22px; height:22px; }
+    nav.tabbar button.on{ color:var(--forest); }
+
+    /* ---- Simple view header (calendar / grocery / to-do) ---- */
+    .vhead{
+      background:linear-gradient(158deg,var(--forest-mid),var(--forest-dark)); color:#fff;
+      padding:calc(env(safe-area-inset-top) + 26px) 22px 22px; border-radius:0 0 24px 24px;
+    }
+    .vhead .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .vhead h2{ font-size:21px; font-weight:700; letter-spacing:-.01em; }
+    .vhead .sub{ font-size:13px; color:rgba(230,242,238,.9); margin-top:4px; }
+    .vhead .addbtn{ flex:none; background:#fff; color:var(--forest); font-weight:650; font-size:13.5px; padding:9px 14px; border-radius:11px; }
+    .vhead .addbtn:active{ opacity:.85; }
+    .addbar{ display:flex; gap:9px; margin-top:16px; }
+    .addbar input{ flex:1; min-width:0; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); border-radius:12px; padding:12px 14px; font-size:16px; color:#fff; outline:none; }
+    .addbar input::placeholder{ color:rgba(255,255,255,.7); }
+    .addbar input:focus{ border-color:#fff; background:rgba(255,255,255,.22); }
+    .addbar button{ flex:none; background:#fff; color:var(--forest); font-weight:650; font-size:14px; padding:12px 18px; border-radius:12px; }
+
+    /* ---- Checklist (grocery / to-do) ---- */
+    .check-item{ display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 13px; margin-bottom:9px; }
+    .check-item .cbox{ width:26px; height:26px; flex:none; border-radius:8px; border:1.8px solid var(--forest); color:#fff; font-size:15px; line-height:1; display:flex; align-items:center; justify-content:center; background:#fff; }
+    .check-item.done .cbox{ background:var(--forest); }
+    .check-item .c-mid{ flex:1; min-width:0; }
+    .check-item .c-text{ font-size:15px; font-weight:600; line-height:1.3; word-break:break-word; }
+    .check-item .c-by{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+    .check-item.done .c-text{ text-decoration:line-through; color:var(--muted); }
+    .check-item .c-del{ flex:none; font-size:16px; color:var(--muted); padding:4px 6px; }
+    .check-item .c-del:active{ color:var(--owe); }
+    .clearbar{ text-align:center; margin-top:6px; }
+    .clearbar button{ font-size:13px; color:var(--muted); font-weight:600; padding:8px 12px; }
+    .clearbar button:active{ color:var(--owe); }
+
+    /* ---- Calendar dated list ---- */
+    .item .desc.wrap{ white-space:normal; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Needs-setup screen -->
+    <div id="setupScreen" class="notice hidden">
+      <div class="ic">🔧</div>
+      <h2>Almost there</h2>
+      <p>This app needs its Firebase keys before it can sync. Paste your config into the file where it says <b>PASTE YOUR CONFIG</b>, then reload.</p>
+    </div>
+
+    <!-- Auth -->
+    <div id="authScreen" class="hidden">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5 L9.5 18 L20 6" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1 id="authTitle">Welcome back</h1>
+      <p class="lead" id="authLead">Sign in to your shared expenses.</p>
+      <div class="field" id="nameField">
+        <label>Your name</label>
+        <input id="fName" type="text" placeholder="e.g. Vidit" autocomplete="name" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input id="fEmail" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="fPass" type="password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button id="authBtn" class="btn-primary">Sign in</button>
+      <p class="err" id="authErr"></p>
+      <p class="switch" id="authSwitch">First time here? <b>Create an account</b></p>
+    </div>
+
+    <!-- App -->
+    <div id="appScreen" class="hidden">
+
+      <!-- ===== Expenses view ===== -->
+      <div id="viewExpenses" class="view">
+        <header>
+          <div class="topbar">
+            <span class="title">Our Expenses</span>
+            <button class="signout" id="signOutBtn">Sign out</button>
+          </div>
+          <p class="balance-lead" id="balLead">You're all settled</p>
+          <p class="balance-amt tabular" id="balAmt">£0.00</p>
+          <p class="balance-note" id="balNote">Nothing owed either way.</p>
+          <div class="actions">
+            <button class="act solid" id="addBtn">+ Add expense</button>
+            <button class="act" id="settleBtn">Settle up</button>
+          </div>
+        </header>
+        <main>
+          <div id="feed"></div>
+          <div class="empty hidden" id="feedEmpty">
+            <div class="ic">🧾</div>
+            <p>No expenses yet.<br>Add your first one to get started.</p>
+          </div>
+        </main>
+      </div>
+
+      <!-- ===== Calendar view ===== -->
+      <div id="viewCalendar" class="view hidden">
+        <div class="vhead">
+          <div class="topbar">
+            <div><h2>Calendar</h2><div class="sub" id="calMonth"></div></div>
+            <button class="addbtn" id="calAddBtn">+ Add plan</button>
+          </div>
+        </div>
+        <main><div id="calList"></div></main>
+      </div>
+
+      <!-- ===== Grocery view ===== -->
+      <div id="viewGrocery" class="view hidden">
+        <div class="vhead">
+          <div class="topbar"><div><h2>Groceries</h2><div class="sub">Add anything that runs low</div></div></div>
+          <div class="addbar">
+            <input id="groInput" type="text" placeholder="e.g. Milk" autocomplete="off" />
+            <button id="groAddBtn">Add</button>
+          </div>
+        </div>
+        <main>
+          <div id="groList"></div>
+          <div class="clearbar"><button id="groClear">Clear checked items</button></div>
+        </main>
+      </div>
+
+      <!-- ===== To-do view ===== -->
+      <div id="viewTodos" class="view hidden">
+        <div class="vhead">
+          <div class="topbar"><div><h2>To-do</h2><div class="sub">Shared tasks for both of us</div></div></div>
+          <div class="addbar">
+            <input id="todoInput" type="text" placeholder="e.g. Call the landlord" autocomplete="off" />
+            <button id="todoAddBtn">Add</button>
+          </div>
+        </div>
+        <main>
+          <div id="todoList"></div>
+          <div class="clearbar"><button id="todoClear">Clear done</button></div>
+        </main>
+      </div>
+
+      <!-- ===== Bottom tab bar ===== -->
+      <nav class="tabbar">
+        <button data-view="expenses" class="on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>
+          <span>Expenses</span>
+        </button>
+        <button data-view="calendar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
+          <span>Calendar</span>
+        </button>
+        <button data-view="grocery">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.4a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="17.5" cy="20" r="1.3"/></svg>
+          <span>Grocery</span>
+        </button>
+        <button data-view="todos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5l1.6 1.6L8.5 5M4 13l1.6 1.6L8.5 11.5M4 19.5l1.6 1.6L8.5 18M12 6.5h8M12 13h8M12 19.5h8"/></svg>
+          <span>To-do</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
+    import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+             signInWithEmailAndPassword, signOut, updateProfile }
+      from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
+    import { getFirestore, collection, addDoc, deleteDoc, doc, setDoc, updateDoc,
+             onSnapshot, query, orderBy, serverTimestamp }
+      from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
+
+    /* ============================================================
+       PASTE YOUR CONFIG  ↓↓↓
+       From Firebase Console → Project settings → "Your apps" → SDK setup.
+       ============================================================ */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCeZY_aF1CDnbXDF56TfEkIr8Jl6zI-ScM",
+      authDomain: "splitwise-previd.firebaseapp.com",
+      projectId: "splitwise-previd",
+      storageBucket: "splitwise-previd.firebasestorage.app",
+      messagingSenderId: "1064413248963",
+      appId: "1:1064413248963:web:99f6d43fd89e8625cb1176",
+      measurementId: "G-PHEBP1BE7J"
+    };
+    /* ============================================================ */
+
+    const $ = (s) => document.querySelector(s);
+    const show = (el) => el.classList.remove('hidden');
+    const hide = (el) => el.classList.add('hidden');
+
+    const CATS = [
+      {id:'Groceries', ic:'🛒'}, {id:'Rent', ic:'🏠'}, {id:'Utilities', ic:'💡'},
+      {id:'Dining', ic:'🍽️'}, {id:'Transport', ic:'🚗'}, {id:'Household', ic:'🧻'},
+      {id:'Health', ic:'⚕️'}, {id:'Other', ic:'📦'}
+    ];
+    const catIc = (c) => (CATS.find(x=>x.id===c)||{ic:'📦'}).ic;
+    const money = (n) => '£' + Math.abs(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    // If config still has placeholders, stop and show the setup screen.
+    if (String(firebaseConfig.apiKey).startsWith('PASTE')) {
+      show($('#setupScreen'));
+    } else {
+      startApp();
+    }
+
+    function startApp(){
+      const app  = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db   = getFirestore(app);
+
+      let me = null, partner = null;
+      let expenses = [], settlements = [], users = [];
+      let unsubUsers=null, unsubExp=null, unsubSet=null;
+      let signupMode = false;
+      let knownIds = new Set(), initialised = false;
+      let lastSeen = Number(localStorage.getItem('exp.lastSeen') || 0);
+
+      /* ---------- Auth UI ---------- */
+      function setMode(su){
+        signupMode = su;
+        $('#authTitle').textContent = su ? 'Create your account' : 'Welcome back';
+        $('#authLead').textContent  = su ? 'Set up your side of the shared expenses.' : 'Sign in to your shared expenses.';
+        $('#authBtn').textContent   = su ? 'Create account' : 'Sign in';
+        $('#authSwitch').innerHTML  = su ? 'Already have an account? <b>Sign in</b>' : 'First time here? <b>Create an account</b>';
+        $('#nameField').classList.toggle('hidden', !su);
+        $('#fPass').setAttribute('autocomplete', su ? 'new-password' : 'current-password');
+        $('#authErr').textContent = '';
+      }
+      $('#authSwitch').onclick = () => setMode(!signupMode);
+
+      $('#authBtn').onclick = async () => {
+        const email = $('#fEmail').value.trim();
+        const pass  = $('#fPass').value;
+        const name  = $('#fName').value.trim();
+        $('#authErr').textContent = '';
+        if (!email || !pass) { $('#authErr').textContent = 'Enter your email and password.'; return; }
+        if (signupMode && !name) { $('#authErr').textContent = 'Add your name so your partner can see who paid.'; return; }
+        $('#authBtn').disabled = true;
+        try {
+          if (signupMode){
+            const cred = await createUserWithEmailAndPassword(auth, email, pass);
+            await updateProfile(cred.user, { displayName: name });
+            await setDoc(doc(db,'users',cred.user.uid), { name, email });
+          } else {
+            await signInWithEmailAndPassword(auth, email, pass);
+          }
+        } catch (e) {
+          $('#authErr').textContent = friendly(e.code);
+        } finally {
+          $('#authBtn').disabled = false;
+        }
+      };
+
+      function friendly(code){
+        const m = {
+          'auth/invalid-email':'That email doesn\u2019t look right.',
+          'auth/missing-password':'Enter your password.',
+          'auth/weak-password':'Password needs at least 6 characters.',
+          'auth/email-already-in-use':'That email already has an account \u2014 try signing in.',
+          'auth/invalid-credential':'Wrong email or password.',
+          'auth/wrong-password':'Wrong password.',
+          'auth/user-not-found':'No account with that email yet.',
+          'auth/network-request-failed':'No connection \u2014 check your internet.'
+        };
+        return m[code] || 'Something went wrong. Try again.';
+      }
+
+      /* ---------- Auth state ---------- */
+      onAuthStateChanged(auth, (user) => {
+        if (user){
+          me = { uid:user.uid, name:user.displayName || 'Me' };
+          // Make sure a users/ record exists (covers older accounts).
+          setDoc(doc(db,'users',user.uid), { name: me.name, email: user.email }, { merge:true }).catch(()=>{});
+          hide($('#authScreen')); show($('#appScreen'));
+          listen(db);
+        } else {
+          me = partner = null;
+          detach();
+          hide($('#appScreen')); show($('#authScreen'));
+          setMode(false);
+        }
+      });
+
+      $('#signOutBtn').onclick = () => signOut(auth);
+
+      /* ---------- Live listeners ---------- */
+      function detach(){ [unsubUsers,unsubExp,unsubSet].forEach(u=>u&&u()); unsubUsers=unsubExp=unsubSet=null; initialised=false; knownIds=new Set(); }
+
+      function listen(db){
+        detach();
+        unsubUsers = onSnapshot(collection(db,'users'), (snap) => {
+          users = snap.docs.map(d=>({uid:d.id, ...d.data()}));
+          partner = users.find(u=>u.uid !== me.uid) || null;
+          render();
+        });
+        unsubExp = onSnapshot(query(collection(db,'expenses'), orderBy('createdAt','desc')), (snap) => {
+          expenses = snap.docs.map(d=>({id:d.id, kind:'exp', ...d.data(), ms: d.data().createdAt?.toMillis?.() ?? Date.now()}));
+          handleIncoming(snap, 'expense');
+          render();
+        });
+        unsubSet = onSnapshot(query(collection(db,'settlements'), orderBy('createdAt','desc')), (snap) => {
+          settlements = snap.docs.map(d=>({id:d.id, kind:'settle', ...d.data(), ms: d.data().createdAt?.toMillis?.() ?? Date.now()}));
+          handleIncoming(snap, 'settlement');
+          render();
+        });
+      }
+
+      // In-app notification: toast when the OTHER person adds something.
+      function handleIncoming(snap, label){
+        snap.docChanges().forEach(ch => {
+          if (ch.type !== 'added') return;
+          const d = ch.doc.data();
+          const isNew = !knownIds.has(ch.doc.id);
+          knownIds.add(ch.doc.id);
+          if (initialised && isNew && !ch.doc.metadata.hasPendingWrites && d.createdByUid !== me.uid){
+            const who = d.createdByName || 'Your partner';
+            const amt = money(d.amount || 0);
+            toast(`${who} added ${amt}${d.description ? ' \u00b7 ' + d.description : ''}`, '\u2728');
+          }
+        });
+        if (!initialised){
+          // Count anything new since last visit, then mark seen.
+          const newer = snap.docs.filter(dd => {
+            const d = dd.data();
+            const ms = d.createdAt?.toMillis?.() ?? 0;
+            return d.createdByUid !== me.uid && ms > lastSeen;
+          }).length;
+          if (newer > 0) toast(`${newer} new update${newer>1?'s':''} since your last visit`, '\ud83d\udd14');
+          initialised = true;
+          lastSeen = Date.now();
+          localStorage.setItem('exp.lastSeen', String(lastSeen));
+        }
+      }
+
+      /* ---------- Balance ---------- */
+      function computeBalance(){
+        // Positive = partner owes me. Negative = I owe partner.
+        let bal = 0;
+        for (const e of expenses){
+          const other = e.split === 'full' ? e.amount : e.amount/2;
+          if (e.paidByUid === me.uid) bal += other;
+          else bal -= other;                 // partner paid → I owe my share
+        }
+        for (const s of settlements){
+          if (s.toUid === me.uid) bal -= s.amount;   // partner paid me back
+          else bal += s.amount;                      // I paid partner back
+        }
+        return Math.round(bal*100)/100;
+      }
+
+      /* ---------- Render ---------- */
+      function render(){
+        if (!me) return;
+        const bal = computeBalance();
+        const pName = partner ? partner.name : 'your partner';
+        if (Math.abs(bal) < 0.005){
+          $('#balLead').textContent = "You're all settled";
+          $('#balAmt').textContent  = money(0);
+          $('#balNote').textContent = 'Nothing owed either way.';
+        } else if (bal > 0){
+          $('#balLead').textContent = `${pName} owes you`;
+          $('#balAmt').textContent  = money(bal);
+          $('#balNote').textContent = 'In your favour.';
+        } else {
+          $('#balLead').textContent = `You owe ${pName}`;
+          $('#balAmt').textContent  = money(bal);
+          $('#balNote').textContent = 'Tap Settle up when you square it.';
+        }
+
+        const all = [...expenses, ...settlements].sort((a,b)=>b.ms - a.ms);
+        const feed = $('#feed');
+        if (all.length === 0){ feed.innerHTML=''; show($('#feedEmpty')); return; }
+        hide($('#feedEmpty'));
+
+        const groups = {};
+        for (const it of all){ const k = dayKey(it.ms); (groups[k] ||= []).push(it); }
+        feed.innerHTML = Object.entries(groups).map(([day, items]) =>
+          `<div class="daygroup"><p class="dayhead">${day}</p>` +
+          items.map(rowHTML).join('') + `</div>`
+        ).join('');
+        feed.querySelectorAll('[data-del]').forEach(btn=>{
+          btn.onclick = () => removeItem(btn.dataset.kind, btn.dataset.del);
+        });
+      }
+
+      function rowHTML(it){
+        if (it.kind === 'settle'){
+          const dir = it.fromUid === me.uid ? `You paid ${esc(it.toName||'partner')}` : `${esc(it.fromName||'Partner')} paid you`;
+          return `<div class="item settle"><div class="ic">\ud83e\udd1d</div>
+            <div class="mid"><div class="desc">Settled up</div><div class="meta">${dir}</div>
+            <button class="del" data-kind="settle" data-del="${it.id}">Delete</button></div>
+            <div class="right"><div class="amt">${money(it.amount)}</div></div></div>`;
+        }
+        const payer = it.paidByUid === me.uid ? 'You' : esc(it.paidByName || 'Partner');
+        const splitTxt = it.split === 'full' ? 'owes it all' : 'split equally';
+        const other = it.split === 'full' ? it.amount : it.amount/2;
+        const owedTxt = it.paidByUid === me.uid ? `you\u2019re owed ${money(other)}` : `you owe ${money(other)}`;
+        return `<div class="item"><div class="ic">${catIc(it.category)}</div>
+          <div class="mid"><div class="desc">${esc(it.description||it.category||'Expense')}</div>
+          <div class="meta">${payer} paid \u00b7 ${splitTxt}</div>
+          <button class="del" data-kind="exp" data-del="${it.id}">Delete</button></div>
+          <div class="right"><div class="amt">${money(it.amount)}</div><div class="share">${owedTxt}</div></div></div>`;
+      }
+
+      async function removeItem(kind, id){
+        if (!confirm('Delete this entry?')) return;
+        try { await deleteDoc(doc(db, kind==='settle'?'settlements':'expenses', id)); }
+        catch(e){ toast('Could not delete \u2014 try again', '\u26a0\ufe0f'); }
+      }
+
+      /* ---------- Add expense sheet ---------- */
+      let addState = { cat:'Groceries', paidBy:'me', split:'equal' };
+      $('#addBtn').onclick = () => openAdd();
+
+      function openAdd(){
+        addState = { cat:'Groceries', paidBy:'me', split:'equal' };
+        const pName = partner ? esc(partner.name) : null;
+        const sheet = `
+          <div class="backdrop" id="bd">
+            <div class="sheet" id="sheet">
+              <h3>Add expense</h3>
+              <div class="field"><label>Amount</label>
+                <input id="aAmt" type="text" inputmode="decimal" placeholder="0.00" /></div>
+              <div class="field"><label>Description</label>
+                <input id="aDesc" type="text" placeholder="e.g. Tesco shop" /></div>
+              <div class="field"><label>Category</label>
+                <div class="chips" id="aCats">${CATS.map(c=>`<button class="chip${c.id==='Groceries'?' on':''}" data-cat="${c.id}">${c.ic} ${c.id}</button>`).join('')}</div></div>
+              <div class="field"><label>Paid by</label>
+                <div class="seg" id="aPaid">
+                  <button class="on" data-paid="me">You</button>
+                  ${pName ? `<button data-paid="partner">${pName}</button>` : ''}
+                </div></div>
+              <div class="field"><label>Split</label>
+                <div class="seg" id="aSplit">
+                  <button class="on" data-split="equal">Split equally</button>
+                  <button data-split="full">Other owes it all</button>
+                </div></div>
+              <div class="sheet-actions">
+                <button class="btn-ghost" id="aCancel">Cancel</button>
+                <button class="btn-save" id="aSave">Add</button>
+              </div>
+            </div>
+          </div>`;
+        mount(sheet);
+        segWire('#aCats','cat','cat', v=>addState.cat=v, 'chip');
+        segWire('#aPaid','paid','paidBy', v=>addState.paidBy=v);
+        segWire('#aSplit','split','split', v=>addState.split=v);
+        $('#aCancel').onclick = unmount;
+        $('#aSave').onclick = saveExpense;
+        setTimeout(()=>$('#aAmt').focus(), 60);
+      }
+
+      async function saveExpense(){
+        const amt = parseFloat($('#aAmt').value);
+        if (!amt || amt <= 0){ $('#aAmt').focus(); toast('Enter an amount', '\u26a0\ufe0f'); return; }
+        const desc = $('#aDesc').value.trim();
+        const payer = addState.paidBy === 'partner' && partner ? partner : me;
+        $('#aSave').disabled = true;
+        try {
+          await addDoc(collection(db,'expenses'), {
+            amount: Math.round(amt*100)/100,
+            description: desc || addState.cat,
+            category: addState.cat,
+            paidByUid: payer.uid, paidByName: payer.name,
+            split: addState.split,
+            createdByUid: me.uid, createdByName: me.name,
+            createdAt: serverTimestamp()
+          });
+          unmount(); toast('Expense added', '\u2705');
+        } catch(e){ toast('Could not save \u2014 try again', '\u26a0\ufe0f'); $('#aSave').disabled=false; }
+      }
+
+      /* ---------- Settle sheet ---------- */
+      $('#settleBtn').onclick = () => openSettle();
+
+      function openSettle(){
+        if (!partner){ toast('Waiting for your partner to join first', '\u23f3'); return; }
+        const bal = computeBalance();
+        // Default direction: whoever owes pays.
+        let dir = bal < 0 ? 'me' : 'partner'; // 'me' = I pay partner
+        const suggested = Math.abs(bal).toFixed(2);
+        const sheet = `
+          <div class="backdrop" id="bd">
+            <div class="sheet" id="sheet">
+              <h3>Settle up</h3>
+              <div class="field"><label>Who paid whom</label>
+                <div class="seg" id="sDir">
+                  <button class="${dir==='me'?'on':''}" data-dir="me">You paid ${esc(partner.name)}</button>
+                  <button class="${dir==='partner'?'on':''}" data-dir="partner">${esc(partner.name)} paid you</button>
+                </div></div>
+              <div class="field"><label>Amount</label>
+                <input id="sAmt" type="text" inputmode="decimal" value="${suggested>0?suggested:''}" placeholder="0.00" /></div>
+              <div class="sheet-actions">
+                <button class="btn-ghost" id="sCancel">Cancel</button>
+                <button class="btn-save" id="sSave">Record</button>
+              </div>
+            </div>
+          </div>`;
+        mount(sheet);
+        let sDir = dir;
+        segWire('#sDir','dir', null, v=>sDir=v);
+        $('#sCancel').onclick = unmount;
+        $('#sSave').onclick = async () => {
+          const amt = parseFloat($('#sAmt').value);
+          if (!amt || amt<=0){ $('#sAmt').focus(); return; }
+          const from = sDir === 'me' ? me : partner;
+          const to   = sDir === 'me' ? partner : me;
+          $('#sSave').disabled = true;
+          try {
+            await addDoc(collection(db,'settlements'), {
+              amount: Math.round(amt*100)/100,
+              fromUid:from.uid, fromName:from.name, toUid:to.uid, toName:to.name,
+              createdByUid: me.uid, createdByName: me.name,
+              createdAt: serverTimestamp()
+            });
+            unmount(); toast('Settled up', '\u2705');
+          } catch(e){ toast('Could not save \u2014 try again', '\u26a0\ufe0f'); $('#sSave').disabled=false; }
+        };
+      }
+
+      /* ---------- Sheet helpers ---------- */
+      function mount(html){ const w=document.createElement('div'); w.id='modalHost'; w.innerHTML=html; document.body.appendChild(w);
+        $('#bd').onclick = (e)=>{ if(e.target.id==='bd') unmount(); }; }
+      function unmount(){ const h=$('#modalHost'); if(h) h.remove(); }
+      function segWire(sel, attr, _key, cb, cls){
+        document.querySelectorAll(`${sel} [data-${attr}]`).forEach(b=>{
+          b.onclick = () => {
+            document.querySelectorAll(`${sel} [data-${attr}]`).forEach(x=>x.classList.remove('on'));
+            b.classList.add('on'); cb(b.dataset[attr]);
+          };
+        });
+      }
+
+      /* ---------- Toast ---------- */
+      let toastT=null;
+      function toast(msg, ic){
+        const t=$('#toast'); t.innerHTML = (ic?`<span class="t-ic">${ic}</span>`:'') + esc(msg);
+        t.classList.add('show'); clearTimeout(toastT);
+        toastT=setTimeout(()=>t.classList.remove('show'), 3800);
+      }
+
+      /* ---------- utils ---------- */
+      function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+      function dayKey(ms){
+        const d=new Date(ms), now=new Date();
+        const strip=(x)=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime();
+        const diff=Math.round((strip(now)-strip(d))/86400000);
+        if (diff===0) return 'Today';
+        if (diff===1) return 'Yesterday';
+        return d.toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short'});
+      }
+
+      /* ==========================================================
+         SHARED EXTRAS — Calendar · Grocery · To-do
+         Live-synced via Firestore, gated behind the same login.
+         ========================================================== */
+      let calItems = [], groItems = [], todoItems = [];
+      let unsubCal = null, unsubGro = null, unsubTodo = null;
+      let curView = 'expenses';
+      const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set() };
+      const extraInit  = { calendar:false, grocery:false, todos:false };
+
+      /* ---- date helpers ---- */
+      function isoDate(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
+      function parseDate(s){ if(!s) return null; const p=String(s).split('-').map(Number); return new Date(p[0],(p[1]||1)-1,p[2]||1); }
+      function prettyDate(s){
+        const d=parseDate(s); if(!d) return esc(s);
+        const now=new Date(); const strip=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime();
+        const diff=Math.round((strip(d)-strip(now))/86400000);
+        const base=d.toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short'});
+        if(diff===0) return `Today · ${base}`;
+        if(diff===1) return `Tomorrow · ${base}`;
+        if(diff===-1) return `Yesterday · ${base}`;
+        return base;
+      }
+
+      /* ---- generic "partner added" toast ---- */
+      function notifyAdds(snap, key, msgFn){
+        snap.docChanges().forEach(ch => {
+          if (ch.type !== 'added') return;
+          const isNew = !extraKnown[key].has(ch.doc.id);
+          extraKnown[key].add(ch.doc.id);
+          const d = ch.doc.data();
+          if (extraInit[key] && isNew && !ch.doc.metadata.hasPendingWrites && d.byUid && d.byUid !== me.uid){
+            toast(msgFn(d), '✨');
+          }
+        });
+        extraInit[key] = true;
+      }
+
+      /* ---- listeners ---- */
+      function attachExtras(){
+        detachExtras();
+        extraInit.calendar = extraInit.grocery = extraInit.todos = false;
+        unsubCal = onSnapshot(query(collection(db,'calendar'), orderBy('date','asc')), (snap) => {
+          calItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+          notifyAdds(snap, 'calendar', d=>`${d.byName||'Your partner'} added a plan${d.date?' · '+prettyDate(d.date):''}`);
+          if (curView==='calendar') renderCalendar();
+        });
+        unsubGro = onSnapshot(query(collection(db,'grocery'), orderBy('createdAt','asc')), (snap) => {
+          groItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+          notifyAdds(snap, 'grocery', d=>`${d.byName||'Your partner'} added ${d.name||'an item'} to groceries`);
+          if (curView==='grocery') renderGrocery();
+        });
+        unsubTodo = onSnapshot(query(collection(db,'todos'), orderBy('createdAt','asc')), (snap) => {
+          todoItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+          notifyAdds(snap, 'todos', d=>`${d.byName||'Your partner'} added a to-do${d.text?': '+d.text:''}`);
+          if (curView==='todos') renderTodos();
+        });
+      }
+      function detachExtras(){
+        [unsubCal,unsubGro,unsubTodo].forEach(u=>u&&u());
+        unsubCal=unsubGro=unsubTodo=null;
+        calItems=[]; groItems=[]; todoItems=[];
+        extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set();
+      }
+
+      /* ---- view switching ---- */
+      const VIEWS = ['expenses','calendar','grocery','todos'];
+      function switchView(v){
+        curView = v;
+        VIEWS.forEach(x=>{ const el=$('#view'+x.charAt(0).toUpperCase()+x.slice(1)); if(el) el.classList.toggle('hidden', x!==v); });
+        document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.view===v));
+        if(v==='calendar') renderCalendar();
+        if(v==='grocery')  renderGrocery();
+        if(v==='todos')    renderTodos();
+        window.scrollTo(0,0);
+      }
+
+      /* ---- calendar (current-month dated list) ---- */
+      function renderCalendar(){
+        const now=new Date(), y=now.getFullYear(), m=now.getMonth();
+        $('#calMonth').textContent = now.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
+        const items = calItems
+          .filter(it=>{ const d=parseDate(it.date); return d && d.getFullYear()===y && d.getMonth()===m; })
+          .sort((a,b)=> a.date<b.date?-1 : a.date>b.date?1 : 0);
+        const host=$('#calList');
+        if(items.length===0){
+          host.innerHTML = `<div class="empty"><div class="ic">🗓️</div><p>No plans this month yet.<br>Tap “Add plan” to note what you’re up to.</p></div>`;
+          return;
+        }
+        const groups={};
+        items.forEach(it=>{ (groups[it.date] ||= []).push(it); });
+        host.innerHTML = Object.entries(groups).map(([date,list]) =>
+          `<div class="daygroup"><p class="dayhead">${prettyDate(date)}</p>` +
+          list.map(it=>`<div class="item"><div class="ic">📌</div>
+            <div class="mid"><div class="desc wrap">${esc(it.text)}</div>
+            <div class="meta">Added by ${esc(it.byName||'—')}</div>
+            <button class="del" data-delcal="${it.id}">Delete</button></div></div>`).join('') +
+          `</div>`
+        ).join('');
+        host.querySelectorAll('[data-delcal]').forEach(b=>b.onclick=()=>delExtra('calendar', b.dataset.delcal, true));
+      }
+
+      function openAddPlan(){
+        const today = isoDate(new Date());
+        const sheet = `
+          <div class="backdrop" id="bd">
+            <div class="sheet">
+              <h3>Add a plan</h3>
+              <div class="field"><label>Date</label>
+                <input id="pDate" type="date" value="${today}" /></div>
+              <div class="field"><label>What’s happening</label>
+                <input id="pText" type="text" placeholder="e.g. Event in London" /></div>
+              <div class="sheet-actions">
+                <button class="btn-ghost" id="pCancel">Cancel</button>
+                <button class="btn-save" id="pSave">Add</button>
+              </div>
+            </div>
+          </div>`;
+        mount(sheet);
+        $('#pCancel').onclick = unmount;
+        $('#pSave').onclick = async () => {
+          const date=$('#pDate').value, text=$('#pText').value.trim();
+          if(!date){ toast('Pick a date','⚠️'); return; }
+          if(!text){ $('#pText').focus(); toast('Add a short description','⚠️'); return; }
+          $('#pSave').disabled=true;
+          try{
+            await addDoc(collection(db,'calendar'), { date, text, byUid:me.uid, byName:me.name, createdAt:serverTimestamp() });
+            unmount(); toast('Plan added','✅');
+          }catch(e){ toast('Could not save — try again','⚠️'); $('#pSave').disabled=false; }
+        };
+        setTimeout(()=>$('#pText').focus(), 60);
+      }
+
+      /* ---- checklist shared logic (grocery + to-do) ---- */
+      function renderChecklist(coll, items, hostSel, textField, emptyIc, emptyMsg){
+        const host=$(hostSel);
+        const sorted=[...items].sort((a,b)=>(a.done?1:0)-(b.done?1:0));
+        if(sorted.length===0){ host.innerHTML=`<div class="empty"><div class="ic">${emptyIc}</div><p>${emptyMsg}</p></div>`; return; }
+        host.innerHTML = sorted.map(it=>`<div class="check-item${it.done?' done':''}">
+          <button class="cbox" data-toggle="${it.id}" aria-label="toggle done">${it.done?'✓':''}</button>
+          <div class="c-mid"><div class="c-text">${esc(it[textField]||'')}</div><div class="c-by">${esc(it.byName||'—')}</div></div>
+          <button class="c-del" data-del="${it.id}" aria-label="delete">✕</button>
+        </div>`).join('');
+        host.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>toggleDone(coll, b.dataset.toggle, items));
+        host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delExtra(coll, b.dataset.del, false));
+      }
+      const renderGrocery = () => renderChecklist('grocery', groItems, '#groList', 'name', '🛒', 'Grocery list is empty.<br>Add items as they run low.');
+      const renderTodos   = () => renderChecklist('todos',   todoItems, '#todoList', 'text', '✅', 'No tasks yet.<br>Add something you both need to do.');
+
+      async function addChecklistItem(coll, inputSel, field){
+        const inp=$(inputSel); const val=inp.value.trim(); if(!val) return;
+        inp.value=''; inp.focus();
+        try{ await addDoc(collection(db,coll), { [field]:val, done:false, byUid:me.uid, byName:me.name, createdAt:serverTimestamp() }); }
+        catch(e){ toast('Could not add — try again','⚠️'); inp.value=val; }
+      }
+      async function toggleDone(coll, id, items){
+        const it=items.find(x=>x.id===id); if(!it) return;
+        try{ await updateDoc(doc(db,coll,id), { done: !it.done }); }
+        catch(e){ toast('Could not update — try again','⚠️'); }
+      }
+      async function delExtra(coll, id, ask){
+        if(ask && !confirm('Delete this entry?')) return;
+        try{ await deleteDoc(doc(db,coll,id)); }
+        catch(e){ toast('Could not delete — try again','⚠️'); }
+      }
+      async function clearDone(coll, items){
+        const done=items.filter(x=>x.done);
+        if(done.length===0){ toast('Nothing checked off yet','ℹ️'); return; }
+        if(!confirm(`Clear ${done.length} checked item${done.length>1?'s':''}?`)) return;
+        for(const it of done){ try{ await deleteDoc(doc(db,coll,it.id)); }catch(e){} }
+        toast('Cleared','✅');
+      }
+
+      /* ---- wire up ---- */
+      document.querySelectorAll('nav.tabbar button').forEach(b=>{ b.onclick=()=>switchView(b.dataset.view); });
+      $('#calAddBtn').onclick  = openAddPlan;
+      $('#groAddBtn').onclick  = () => addChecklistItem('grocery','#groInput','name');
+      $('#groInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('grocery','#groInput','name'); });
+      $('#groClear').onclick   = () => clearDone('grocery', groItems);
+      $('#todoAddBtn').onclick = () => addChecklistItem('todos','#todoInput','text');
+      $('#todoInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('todos','#todoInput','text'); });
+      $('#todoClear').onclick  = () => clearDone('todos', todoItems);
+
+      onAuthStateChanged(auth, (user) => {
+        if(user){ attachExtras(); }
+        else { detachExtras(); switchView('expenses'); }
+      });
+    }
+  </script>
+</body>
+</html>
