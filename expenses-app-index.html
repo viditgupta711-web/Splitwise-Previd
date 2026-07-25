@@ -106,7 +106,7 @@
     .empty p{ margin-top:12px; font-size:14px; line-height:1.5; }
 
     /* ---- Modal (bottom sheet) ---- */
-    .backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.42); backdrop-filter:blur(2px); z-index:50; display:flex; align-items:flex-end; justify-content:center; }
+    .backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.42); backdrop-filter:blur(2px); z-index:110; display:flex; align-items:flex-end; justify-content:center; }
     .sheet{ background:#fff; width:100%; max-width:460px; border-radius:22px 22px 0 0; padding:22px 22px calc(env(safe-area-inset-bottom) + 22px); }
     .sheet h3{ font-size:17px; font-weight:700; margin-bottom:16px; }
     .seg{ display:flex; gap:6px; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:4px; }
@@ -277,6 +277,17 @@
         </main>
       </div>
 
+      <!-- ===== Rules view ===== -->
+      <div id="viewRules" class="view hidden">
+        <div class="vhead">
+          <div class="topbar">
+            <div><h2>Rules of the relationship</h2><div class="sub">Do’s and don’ts we both agree on</div></div>
+            <button class="addbtn" id="ruleAddBtn">+ Add rule</button>
+          </div>
+        </div>
+        <main><div id="ruleList"></div></main>
+      </div>
+
       <!-- ===== Bottom tab bar ===== -->
       <nav class="tabbar">
         <button data-view="expenses" class="on">
@@ -294,6 +305,10 @@
         <button data-view="todos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5l1.6 1.6L8.5 5M4 13l1.6 1.6L8.5 11.5M4 19.5l1.6 1.6L8.5 18M12 6.5h8M12 13h8M12 19.5h8"/></svg>
           <span>To-do</span>
+        </button>
+        <button data-view="rules">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.7-4.35-9.2-8.7C1 9.5 2.4 5.8 5.8 5.8c1.9 0 3.2 1.1 4.2 2.3 1-1.2 2.3-2.3 4.2-2.3 3.4 0 4.8 3.7 3 6.5C18.7 16.65 12 21 12 21z"/></svg>
+          <span>Rules</span>
         </button>
       </nav>
 
@@ -696,11 +711,11 @@
          SHARED EXTRAS — Calendar · Grocery · To-do
          Live-synced via Firestore, gated behind the same login.
          ========================================================== */
-      let calItems = [], groItems = [], todoItems = [];
-      let unsubCal = null, unsubGro = null, unsubTodo = null;
+      let calItems = [], groItems = [], todoItems = [], rulesItems = [];
+      let unsubCal = null, unsubGro = null, unsubTodo = null, unsubRules = null;
       let curView = 'expenses';
-      const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set() };
-      const extraInit  = { calendar:false, grocery:false, todos:false };
+      const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set(), rules:new Set() };
+      const extraInit  = { calendar:false, grocery:false, todos:false, rules:false };
 
       /* ---- date helpers ---- */
       function isoDate(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
@@ -733,7 +748,7 @@
       /* ---- listeners ---- */
       function attachExtras(){
         detachExtras();
-        extraInit.calendar = extraInit.grocery = extraInit.todos = false;
+        extraInit.calendar = extraInit.grocery = extraInit.todos = extraInit.rules = false;
         unsubCal = onSnapshot(query(collection(db,'calendar'), orderBy('date','asc')), (snap) => {
           calItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
           notifyAdds(snap, 'calendar', d=>`${d.byName||'Your partner'} added a plan${d.date?' · '+prettyDate(d.date):''}`);
@@ -749,16 +764,21 @@
           notifyAdds(snap, 'todos', d=>`${d.byName||'Your partner'} added a to-do${d.text?': '+d.text:''}`);
           if (curView==='todos') renderTodos();
         });
+        unsubRules = onSnapshot(query(collection(db,'rules'), orderBy('createdAt','asc')), (snap) => {
+          rulesItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+          notifyAdds(snap, 'rules', d=>`${d.byName||'Your partner'} added a relationship rule`);
+          if (curView==='rules') renderRules();
+        });
       }
       function detachExtras(){
-        [unsubCal,unsubGro,unsubTodo].forEach(u=>u&&u());
-        unsubCal=unsubGro=unsubTodo=null;
-        calItems=[]; groItems=[]; todoItems=[];
-        extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set();
+        [unsubCal,unsubGro,unsubTodo,unsubRules].forEach(u=>u&&u());
+        unsubCal=unsubGro=unsubTodo=unsubRules=null;
+        calItems=[]; groItems=[]; todoItems=[]; rulesItems=[];
+        extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set(); extraKnown.rules=new Set();
       }
 
       /* ---- view switching ---- */
-      const VIEWS = ['expenses','calendar','grocery','todos'];
+      const VIEWS = ['expenses','calendar','grocery','todos','rules'];
       function switchView(v){
         curView = v;
         VIEWS.forEach(x=>{ const el=$('#view'+x.charAt(0).toUpperCase()+x.slice(1)); if(el) el.classList.toggle('hidden', x!==v); });
@@ -766,6 +786,7 @@
         if(v==='calendar') renderCalendar();
         if(v==='grocery')  renderGrocery();
         if(v==='todos')    renderTodos();
+        if(v==='rules')    renderRules();
         window.scrollTo(0,0);
       }
 
@@ -825,6 +846,60 @@
         setTimeout(()=>$('#pText').focus(), 60);
       }
 
+      /* ---- rules of the relationship (do's & don'ts) ---- */
+      function renderRules(){
+        const host=$('#ruleList');
+        if(rulesItems.length===0){
+          host.innerHTML = `<div class="empty"><div class="ic">💚</div><p>No rules yet.<br>Add the do’s and don’ts you both agree on.</p></div>`;
+          return;
+        }
+        const dos   = rulesItems.filter(r=>r.type!=='dont');
+        const donts = rulesItems.filter(r=>r.type==='dont');
+        const block = (label, list, ic) => list.length ?
+          `<div class="daygroup"><p class="dayhead">${label}</p>` +
+          list.map(r=>`<div class="item"><div class="ic">${ic}</div>
+            <div class="mid"><div class="desc wrap">${esc(r.text)}</div>
+            <div class="meta">Added by ${esc(r.byName||'—')}</div>
+            <button class="del" data-delrule="${r.id}">Delete</button></div></div>`).join('') +
+          `</div>` : '';
+        host.innerHTML = block('✅ Do', dos, '💚') + block('🚫 Don’t', donts, '🚫');
+        host.querySelectorAll('[data-delrule]').forEach(b=>b.onclick=()=>delExtra('rules', b.dataset.delrule, true));
+      }
+
+      function openAddRule(){
+        let rtype='do';
+        const sheet = `
+          <div class="backdrop" id="bd">
+            <div class="sheet">
+              <h3>Add a rule</h3>
+              <div class="field"><label>Type</label>
+                <div class="seg" id="rType">
+                  <button class="on" data-rtype="do">✅ Do</button>
+                  <button data-rtype="dont">🚫 Don’t</button>
+                </div></div>
+              <div class="field"><label>The rule</label>
+                <input id="rText" type="text" placeholder="e.g. Always talk it out before bed" /></div>
+              <div class="sheet-actions">
+                <button class="btn-ghost" id="rCancel">Cancel</button>
+                <button class="btn-save" id="rSave">Add</button>
+              </div>
+            </div>
+          </div>`;
+        mount(sheet);
+        segWire('#rType','rtype', null, v=>rtype=v);
+        $('#rCancel').onclick = unmount;
+        $('#rSave').onclick = async () => {
+          const text=$('#rText').value.trim();
+          if(!text){ $('#rText').focus(); toast('Write the rule first','⚠️'); return; }
+          $('#rSave').disabled=true;
+          try{
+            await addDoc(collection(db,'rules'), { text, type:rtype, byUid:me.uid, byName:me.name, createdAt:serverTimestamp() });
+            unmount(); toast('Rule added','✅');
+          }catch(e){ toast('Could not save — try again','⚠️'); $('#rSave').disabled=false; }
+        };
+        setTimeout(()=>$('#rText').focus(), 60);
+      }
+
       /* ---- checklist shared logic (grocery + to-do) ---- */
       function renderChecklist(coll, items, hostSel, textField, emptyIc, emptyMsg){
         const host=$(hostSel);
@@ -868,6 +943,7 @@
       /* ---- wire up ---- */
       document.querySelectorAll('nav.tabbar button').forEach(b=>{ b.onclick=()=>switchView(b.dataset.view); });
       $('#calAddBtn').onclick  = openAddPlan;
+      $('#ruleAddBtn').onclick = openAddRule;
       $('#groAddBtn').onclick  = () => addChecklistItem('grocery','#groInput','name');
       $('#groInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('grocery','#groInput','name'); });
       $('#groClear').onclick   = () => clearDone('grocery', groItems);
