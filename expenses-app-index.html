@@ -174,6 +174,18 @@
 
     /* ---- Calendar dated list ---- */
     .item .desc.wrap{ white-space:normal; }
+
+    /* ---- Meal prep weekly grid ---- */
+    .mealday{ background:var(--card); border:1px solid var(--line); border-radius:16px; margin-bottom:11px; overflow:hidden; }
+    .mealday .dname{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); padding:11px 13px 3px; }
+    .mealslot{ display:flex; align-items:center; gap:11px; padding:11px 13px; border-top:1px solid var(--line); }
+    .mealslot .mtag{ width:46px; flex:none; font-size:11px; font-weight:700; color:var(--forest); text-transform:uppercase; letter-spacing:.03em; }
+    .mealslot .mmid{ flex:1; min-width:0; }
+    .mealslot .mdish{ font-size:14.5px; font-weight:600; line-height:1.25; word-break:break-word; }
+    .mealslot .mdish.empty{ color:var(--muted); font-weight:500; }
+    .mealslot .mwho{ margin-top:3px; }
+    .person-chip{ display:inline-block; font-size:11px; font-weight:600; color:var(--forest); background:var(--tint); border-radius:999px; padding:2px 9px; }
+    .mealslot .chev{ flex:none; font-size:20px; color:var(--muted); }
   </style>
 </head>
 <body>
@@ -288,6 +300,17 @@
         <main><div id="ruleList"></div></main>
       </div>
 
+      <!-- ===== Meal prep view ===== -->
+      <div id="viewMeals" class="view hidden">
+        <div class="vhead">
+          <div class="topbar">
+            <div><h2>Meal Prep</h2><div class="sub">This week · lunch &amp; dinner</div></div>
+            <button class="addbtn" id="mealResetBtn">Reset week</button>
+          </div>
+        </div>
+        <main><div id="mealList"></div></main>
+      </div>
+
       <!-- ===== Bottom tab bar ===== -->
       <nav class="tabbar">
         <button data-view="expenses" class="on">
@@ -309,6 +332,10 @@
         <button data-view="rules">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.7-4.35-9.2-8.7C1 9.5 2.4 5.8 5.8 5.8c1.9 0 3.2 1.1 4.2 2.3 1-1.2 2.3-2.3 4.2-2.3 3.4 0 4.8 3.7 3 6.5C18.7 16.65 12 21 12 21z"/></svg>
           <span>Rules</span>
+        </button>
+        <button data-view="meals">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="3.1"/></svg>
+          <span>Meals</span>
         </button>
       </nav>
 
@@ -711,11 +738,13 @@
          SHARED EXTRAS — Calendar · Grocery · To-do
          Live-synced via Firestore, gated behind the same login.
          ========================================================== */
-      let calItems = [], groItems = [], todoItems = [], rulesItems = [];
-      let unsubCal = null, unsubGro = null, unsubTodo = null, unsubRules = null;
+      let calItems = [], groItems = [], todoItems = [], rulesItems = [], mealMap = {};
+      let unsubCal = null, unsubGro = null, unsubTodo = null, unsubRules = null, unsubMeals = null;
       let curView = 'expenses';
       const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set(), rules:new Set() };
-      const extraInit  = { calendar:false, grocery:false, todos:false, rules:false };
+      const extraInit  = { calendar:false, grocery:false, todos:false, rules:false, meals:false };
+      const DAYS  = [['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']];
+      const MEALS = [['lunch','Lunch'],['dinner','Dinner']];
 
       /* ---- date helpers ---- */
       function isoDate(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
@@ -748,7 +777,7 @@
       /* ---- listeners ---- */
       function attachExtras(){
         detachExtras();
-        extraInit.calendar = extraInit.grocery = extraInit.todos = extraInit.rules = false;
+        extraInit.calendar = extraInit.grocery = extraInit.todos = extraInit.rules = extraInit.meals = false;
         unsubCal = onSnapshot(query(collection(db,'calendar'), orderBy('date','asc')), (snap) => {
           calItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
           notifyAdds(snap, 'calendar', d=>`${d.byName||'Your partner'} added a plan${d.date?' · '+prettyDate(d.date):''}`);
@@ -769,16 +798,28 @@
           notifyAdds(snap, 'rules', d=>`${d.byName||'Your partner'} added a relationship rule`);
           if (curView==='rules') renderRules();
         });
+        unsubMeals = onSnapshot(collection(db,'meals'), (snap) => {
+          mealMap = {}; snap.forEach(d=>{ mealMap[d.id] = d.data(); });
+          snap.docChanges().forEach(ch => {
+            if (ch.type === 'removed') return;
+            const d = ch.doc.data();
+            if (extraInit.meals && !ch.doc.metadata.hasPendingWrites && d.byUid && d.byUid !== me.uid && d.dish){
+              toast(`${d.byName||'Your partner'} set ${mealLabelFromId(ch.doc.id)}: ${d.dish}`, '🍽️');
+            }
+          });
+          extraInit.meals = true;
+          if (curView==='meals') renderMeals();
+        });
       }
       function detachExtras(){
-        [unsubCal,unsubGro,unsubTodo,unsubRules].forEach(u=>u&&u());
-        unsubCal=unsubGro=unsubTodo=unsubRules=null;
-        calItems=[]; groItems=[]; todoItems=[]; rulesItems=[];
+        [unsubCal,unsubGro,unsubTodo,unsubRules,unsubMeals].forEach(u=>u&&u());
+        unsubCal=unsubGro=unsubTodo=unsubRules=unsubMeals=null;
+        calItems=[]; groItems=[]; todoItems=[]; rulesItems=[]; mealMap={};
         extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set(); extraKnown.rules=new Set();
       }
 
       /* ---- view switching ---- */
-      const VIEWS = ['expenses','calendar','grocery','todos','rules'];
+      const VIEWS = ['expenses','calendar','grocery','todos','rules','meals'];
       function switchView(v){
         curView = v;
         VIEWS.forEach(x=>{ const el=$('#view'+x.charAt(0).toUpperCase()+x.slice(1)); if(el) el.classList.toggle('hidden', x!==v); });
@@ -787,6 +828,7 @@
         if(v==='grocery')  renderGrocery();
         if(v==='todos')    renderTodos();
         if(v==='rules')    renderRules();
+        if(v==='meals')    renderMeals();
         window.scrollTo(0,0);
       }
 
@@ -900,6 +942,86 @@
         setTimeout(()=>$('#rText').focus(), 60);
       }
 
+      /* ---- meal prep (Mon–Sun × lunch/dinner grid) ---- */
+      function mealLabelFromId(id){
+        const [dk,mk]=String(id).split('_');
+        const d=(DAYS.find(x=>x[0]===dk)||[])[1]||dk;
+        const m=(MEALS.find(x=>x[0]===mk)||[])[1]||mk;
+        return `${d.slice(0,3)} ${String(m).toLowerCase()}`;
+      }
+      function renderMeals(){
+        const host=$('#mealList');
+        host.innerHTML = DAYS.map(([dk,dl])=>{
+          const rows = MEALS.map(([mk,ml])=>{
+            const m = mealMap[`${dk}_${mk}`] || {};
+            const dish = m.dish || '', person = m.person || '';
+            return `<div class="mealslot" data-edit="${dk}|${dl}|${mk}|${ml}">
+              <div class="mtag">${ml}</div>
+              <div class="mmid">
+                <div class="mdish${dish?'':' empty'}">${dish?esc(dish):'Tap to add a dish'}</div>
+                ${person?`<div class="mwho"><span class="person-chip">👤 ${esc(person)}</span></div>`:''}
+              </div>
+              <div class="chev">›</div>
+            </div>`;
+          }).join('');
+          return `<div class="mealday"><div class="dname">${dl}</div>${rows}</div>`;
+        }).join('');
+        host.querySelectorAll('[data-edit]').forEach(el=>{
+          el.onclick=()=>{ const [dk,dl,mk,ml]=el.dataset.edit.split('|'); openMealEdit(dk,dl,mk,ml); };
+        });
+      }
+
+      function openMealEdit(dk, dl, mk, ml){
+        const id = `${dk}_${mk}`;
+        const cur = mealMap[id] || {};
+        const pName = partner ? esc(partner.name) : null;
+        let person = cur.person || '';
+        const sheet = `
+          <div class="backdrop" id="bd">
+            <div class="sheet">
+              <h3>${esc(dl)} · ${esc(ml)}</h3>
+              <div class="field"><label>Dish</label>
+                <input id="mDish" type="text" value="${esc(cur.dish||'')}" placeholder="e.g. Rajma chawal" /></div>
+              <div class="field"><label>Who’s responsible</label>
+                <div class="seg" id="mWho">
+                  <button data-who="${esc(me.name)}">${esc(me.name)}</button>
+                  ${pName ? `<button data-who="${pName}">${pName}</button>` : ''}
+                  <button data-who="Both">Both</button>
+                </div></div>
+              <div class="sheet-actions">
+                <button class="btn-ghost" id="mClear">Clear</button>
+                <button class="btn-save" id="mSave">Save</button>
+              </div>
+            </div>
+          </div>`;
+        mount(sheet);
+        document.querySelectorAll('#mWho [data-who]').forEach(b=>{ if(b.dataset.who===person) b.classList.add('on'); });
+        segWire('#mWho','who', null, v=>person=v);
+        $('#mClear').onclick = async () => {
+          if(!cur.dish && !cur.person){ unmount(); return; }
+          try{ await deleteDoc(doc(db,'meals',id)); }catch(e){}
+          unmount(); toast('Cleared','✅');
+        };
+        $('#mSave').onclick = async () => {
+          const dish=$('#mDish').value.trim();
+          if(!dish){ $('#mDish').focus(); toast('Enter a dish (or tap Clear)','⚠️'); return; }
+          $('#mSave').disabled=true;
+          try{
+            await setDoc(doc(db,'meals',id), { day:dk, meal:mk, dish, person, byUid:me.uid, byName:me.name, updatedAt:serverTimestamp() });
+            unmount(); toast('Saved','✅');
+          }catch(e){ toast('Could not save — try again','⚠️'); $('#mSave').disabled=false; }
+        };
+        setTimeout(()=>$('#mDish').focus(), 60);
+      }
+
+      async function resetWeek(){
+        const ids = Object.keys(mealMap);
+        if(ids.length===0){ toast('Nothing to reset yet','ℹ️'); return; }
+        if(!confirm('Clear all dishes for the week? This can’t be undone.')) return;
+        for(const id of ids){ try{ await deleteDoc(doc(db,'meals',id)); }catch(e){} }
+        toast('Week cleared','✅');
+      }
+
       /* ---- checklist shared logic (grocery + to-do) ---- */
       function renderChecklist(coll, items, hostSel, textField, emptyIc, emptyMsg){
         const host=$(hostSel);
@@ -942,8 +1064,9 @@
 
       /* ---- wire up ---- */
       document.querySelectorAll('nav.tabbar button').forEach(b=>{ b.onclick=()=>switchView(b.dataset.view); });
-      $('#calAddBtn').onclick  = openAddPlan;
-      $('#ruleAddBtn').onclick = openAddRule;
+      $('#calAddBtn').onclick   = openAddPlan;
+      $('#ruleAddBtn').onclick  = openAddRule;
+      $('#mealResetBtn').onclick = resetWeek;
       $('#groAddBtn').onclick  = () => addChecklistItem('grocery','#groInput','name');
       $('#groInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('grocery','#groInput','name'); });
       $('#groClear').onclick   = () => clearDone('grocery', groItems);
