@@ -138,8 +138,8 @@
       border-top:1px solid var(--line); display:flex;
       padding:6px 4px calc(env(safe-area-inset-bottom) + 6px);
     }
-    nav.tabbar button{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 2px; color:var(--muted); font-size:10.5px; font-weight:600; }
-    nav.tabbar button svg{ width:22px; height:22px; }
+    nav.tabbar button{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 1px; color:var(--muted); font-size:9px; font-weight:600; white-space:nowrap; }
+    nav.tabbar button svg{ width:20px; height:20px; }
     nav.tabbar button.on{ color:var(--forest); }
 
     /* ---- Simple view header (calendar / grocery / to-do) ---- */
@@ -186,6 +186,15 @@
     .mealslot .mwho{ margin-top:3px; }
     .person-chip{ display:inline-block; font-size:11px; font-weight:600; color:var(--forest); background:var(--tint); border-radius:999px; padding:2px 9px; }
     .mealslot .chev{ flex:none; font-size:20px; color:var(--muted); }
+
+    /* ---- Pending-delete (needs both to agree) ---- */
+    .pend{ margin-top:7px; background:var(--owe-tint); border:1px solid #eccfc8; border-radius:10px; padding:7px 9px; }
+    .pend .ptxt{ font-size:11.5px; font-weight:600; color:var(--owe); line-height:1.35; }
+    .pend .pacts{ display:flex; gap:7px; margin-top:6px; }
+    .pend .pacts button{ font-size:11.5px; font-weight:700; padding:5px 11px; border-radius:8px; }
+    .pend .ok{ background:var(--forest); color:#fff; }
+    .pend .no{ background:#fff; color:var(--muted); border:1px solid var(--line); }
+    .check-item .c-mid .pend{ margin-top:6px; }
   </style>
 </head>
 <body>
@@ -311,6 +320,18 @@
         <main><div id="mealList"></div></main>
       </div>
 
+      <!-- ===== Bucket list view ===== -->
+      <div id="viewBucket" class="view hidden">
+        <div class="vhead">
+          <div class="topbar"><div><h2>Bucket list</h2><div class="sub">Things we want to do together</div></div></div>
+          <div class="addbar">
+            <input id="bucInput" type="text" placeholder="e.g. Weekend in Edinburgh" autocomplete="off" />
+            <button id="bucAddBtn">Add</button>
+          </div>
+        </div>
+        <main><div id="bucList"></div></main>
+      </div>
+
       <!-- ===== Bottom tab bar ===== -->
       <nav class="tabbar">
         <button data-view="expenses" class="on">
@@ -336,6 +357,10 @@
         <button data-view="meals">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="3.1"/></svg>
           <span>Meals</span>
+        </button>
+        <button data-view="bucket">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 5.4 5.9.7-4.4 4 1.2 5.8L12 16l-5.2 2.9L8 13.1l-4.4-4 5.9-.7z"/></svg>
+          <span>Bucket</span>
         </button>
       </nav>
 
@@ -492,6 +517,13 @@
       // In-app notification: toast when the OTHER person adds something.
       function handleIncoming(snap, label){
         snap.docChanges().forEach(ch => {
+          if (ch.type === 'modified'){
+            const md = ch.doc.data();
+            if (initialised && !ch.doc.metadata.hasPendingWrites && md.delReqBy && md.delReqBy !== me.uid){
+              toast(`${md.delReqName||'Your partner'} wants to delete a ${label}`, '🗑️');
+            }
+            return;
+          }
           if (ch.type !== 'added') return;
           const d = ch.doc.data();
           const isNew = !knownIds.has(ch.doc.id);
@@ -562,9 +594,7 @@
           `<div class="daygroup"><p class="dayhead">${day}</p>` +
           items.map(rowHTML).join('') + `</div>`
         ).join('');
-        feed.querySelectorAll('[data-del]').forEach(btn=>{
-          btn.onclick = () => removeItem(btn.dataset.kind, btn.dataset.del);
-        });
+        wireDelButtons(feed);
       }
 
       function rowHTML(it){
@@ -572,7 +602,7 @@
           const dir = it.fromUid === me.uid ? `You paid ${esc(it.toName||'partner')}` : `${esc(it.fromName||'Partner')} paid you`;
           return `<div class="item settle"><div class="ic">\ud83e\udd1d</div>
             <div class="mid"><div class="desc">Settled up</div><div class="meta">${dir}</div>
-            <button class="del" data-kind="settle" data-del="${it.id}">Delete</button></div>
+            ${delBarHTML('settlements', it)}</div>
             <div class="right"><div class="amt">${money(it.amount)}</div></div></div>`;
         }
         const payer = it.paidByUid === me.uid ? 'You' : esc(it.paidByName || 'Partner');
@@ -582,15 +612,10 @@
         return `<div class="item"><div class="ic">${catIc(it.category)}</div>
           <div class="mid"><div class="desc">${esc(it.description||it.category||'Expense')}</div>
           <div class="meta">${payer} paid \u00b7 ${splitTxt}</div>
-          <button class="del" data-kind="exp" data-del="${it.id}">Delete</button></div>
+          ${delBarHTML('expenses', it)}</div>
           <div class="right"><div class="amt">${money(it.amount)}</div><div class="share">${owedTxt}</div></div></div>`;
       }
 
-      async function removeItem(kind, id){
-        if (!confirm('Delete this entry?')) return;
-        try { await deleteDoc(doc(db, kind==='settle'?'settlements':'expenses', id)); }
-        catch(e){ toast('Could not delete \u2014 try again', '\u26a0\ufe0f'); }
-      }
 
       /* ---------- Add expense sheet ---------- */
       let addState = { cat:'Groceries', paidBy:'me', split:'equal' };
@@ -738,13 +763,60 @@
          SHARED EXTRAS — Calendar · Grocery · To-do
          Live-synced via Firestore, gated behind the same login.
          ========================================================== */
-      let calItems = [], groItems = [], todoItems = [], rulesItems = [], mealMap = {};
-      let unsubCal = null, unsubGro = null, unsubTodo = null, unsubRules = null, unsubMeals = null;
+      let calItems = [], groItems = [], todoItems = [], rulesItems = [], bucItems = [], mealMap = {};
+      let unsubCal = null, unsubGro = null, unsubTodo = null, unsubRules = null, unsubMeals = null, unsubBuc = null;
       let curView = 'expenses';
-      const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set(), rules:new Set() };
-      const extraInit  = { calendar:false, grocery:false, todos:false, rules:false, meals:false };
-      const DAYS  = [['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']];
+      let calShowPast = false;
+      const extraKnown = { calendar:new Set(), grocery:new Set(), todos:new Set(), rules:new Set(), bucket:new Set() };
+      const extraInit  = { calendar:false, grocery:false, todos:false, rules:false, bucket:false, meals:false };
+      const DAYS  = [['sun','Sunday'],['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday']];
       const MEALS = [['lunch','Lunch'],['dinner','Dinner']];
+
+      /* ==========================================================
+         MUTUAL-APPROVAL DELETES
+         Delete marks the item as "requested"; the other person
+         must approve before it actually disappears.
+         ========================================================== */
+      function delBarHTML(coll, it){
+        if (!it.delReqBy){
+          return `<button class="del" data-delreq="${coll}|${it.id}">Delete</button>`;
+        }
+        if (it.delReqBy === me.uid){
+          return `<div class="pend"><div class="ptxt">⏳ Waiting for ${esc(partner?partner.name:'your partner')} to approve this deletion</div>
+            <div class="pacts"><button class="no" data-delcancel="${coll}|${it.id}">Cancel request</button></div></div>`;
+        }
+        return `<div class="pend"><div class="ptxt">🗑️ ${esc(it.delReqName||'Your partner')} wants to delete this</div>
+          <div class="pacts"><button class="ok" data-delok="${coll}|${it.id}">Approve</button>
+          <button class="no" data-delno="${coll}|${it.id}">Reject</button></div></div>`;
+      }
+
+      function wireDelButtons(host){
+        const pair = (v) => v.split('|');
+        host.querySelectorAll('[data-delreq]').forEach(b=>b.onclick=()=>{
+          const [c,i]=pair(b.dataset.delreq);
+          if(confirm('Request deletion?\n\nIt stays until your partner approves.')) requestDelete(c,i);
+        });
+        host.querySelectorAll('[data-delcancel]').forEach(b=>b.onclick=()=>{ const [c,i]=pair(b.dataset.delcancel); clearRequest(c,i,'Request withdrawn'); });
+        host.querySelectorAll('[data-delok]').forEach(b=>b.onclick=()=>{
+          const [c,i]=pair(b.dataset.delok);
+          if(confirm('Approve and delete permanently?')) approveDelete(c,i);
+        });
+        host.querySelectorAll('[data-delno]').forEach(b=>b.onclick=()=>{ const [c,i]=pair(b.dataset.delno); clearRequest(c,i,'Deletion rejected'); });
+      }
+
+      async function requestDelete(coll, id){
+        try{ await updateDoc(doc(db,coll,id), { delReqBy: me.uid, delReqName: me.name });
+             toast('Delete requested — waiting for approval','⏳'); }
+        catch(e){ toast('Could not request — try again','⚠️'); }
+      }
+      async function clearRequest(coll, id, msg){
+        try{ await updateDoc(doc(db,coll,id), { delReqBy: null, delReqName: null }); toast(msg,'↩️'); }
+        catch(e){ toast('Could not update — try again','⚠️'); }
+      }
+      async function approveDelete(coll, id){
+        try{ await deleteDoc(doc(db,coll,id)); toast('Deleted','✅'); }
+        catch(e){ toast('Could not delete — try again','⚠️'); }
+      }
 
       /* ---- date helpers ---- */
       function isoDate(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
@@ -761,12 +833,18 @@
       }
 
       /* ---- generic "partner added" toast ---- */
-      function notifyAdds(snap, key, msgFn){
+      function notifyAdds(snap, key, msgFn, delLabel){
         snap.docChanges().forEach(ch => {
+          const d = ch.doc.data();
+          if (ch.type === 'modified'){
+            if (extraInit[key] && !ch.doc.metadata.hasPendingWrites && d.delReqBy && d.delReqBy !== me.uid){
+              toast(`${d.delReqName||'Your partner'} wants to delete a ${delLabel||'item'}`, '🗑️');
+            }
+            return;
+          }
           if (ch.type !== 'added') return;
           const isNew = !extraKnown[key].has(ch.doc.id);
           extraKnown[key].add(ch.doc.id);
-          const d = ch.doc.data();
           if (extraInit[key] && isNew && !ch.doc.metadata.hasPendingWrites && d.byUid && d.byUid !== me.uid){
             toast(msgFn(d), '✨');
           }
@@ -777,26 +855,31 @@
       /* ---- listeners ---- */
       function attachExtras(){
         detachExtras();
-        extraInit.calendar = extraInit.grocery = extraInit.todos = extraInit.rules = extraInit.meals = false;
+        extraInit.calendar = extraInit.grocery = extraInit.todos = extraInit.rules = extraInit.bucket = extraInit.meals = false;
         unsubCal = onSnapshot(query(collection(db,'calendar'), orderBy('date','asc')), (snap) => {
           calItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
-          notifyAdds(snap, 'calendar', d=>`${d.byName||'Your partner'} added a plan${d.date?' · '+prettyDate(d.date):''}`);
+          notifyAdds(snap, 'calendar', d=>`${d.byName||'Your partner'} added a plan${d.date?' · '+prettyDate(d.date):''}`, 'calendar plan');
           if (curView==='calendar') renderCalendar();
         });
         unsubGro = onSnapshot(query(collection(db,'grocery'), orderBy('createdAt','asc')), (snap) => {
           groItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
-          notifyAdds(snap, 'grocery', d=>`${d.byName||'Your partner'} added ${d.name||'an item'} to groceries`);
+          notifyAdds(snap, 'grocery', d=>`${d.byName||'Your partner'} added ${d.name||'an item'} to groceries`, 'grocery item');
           if (curView==='grocery') renderGrocery();
         });
         unsubTodo = onSnapshot(query(collection(db,'todos'), orderBy('createdAt','asc')), (snap) => {
           todoItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
-          notifyAdds(snap, 'todos', d=>`${d.byName||'Your partner'} added a to-do${d.text?': '+d.text:''}`);
+          notifyAdds(snap, 'todos', d=>`${d.byName||'Your partner'} added a to-do${d.text?': '+d.text:''}`, 'to-do');
           if (curView==='todos') renderTodos();
         });
         unsubRules = onSnapshot(query(collection(db,'rules'), orderBy('createdAt','asc')), (snap) => {
           rulesItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
-          notifyAdds(snap, 'rules', d=>`${d.byName||'Your partner'} added a relationship rule`);
+          notifyAdds(snap, 'rules', d=>`${d.byName||'Your partner'} added a relationship rule`, 'rule');
           if (curView==='rules') renderRules();
+        });
+        unsubBuc = onSnapshot(query(collection(db,'bucket'), orderBy('createdAt','asc')), (snap) => {
+          bucItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+          notifyAdds(snap, 'bucket', d=>`${d.byName||'Your partner'} added to the bucket list${d.text?': '+d.text:''}`, 'bucket list item');
+          if (curView==='bucket') renderBucket();
         });
         unsubMeals = onSnapshot(collection(db,'meals'), (snap) => {
           mealMap = {}; snap.forEach(d=>{ mealMap[d.id] = d.data(); });
@@ -812,14 +895,15 @@
         });
       }
       function detachExtras(){
-        [unsubCal,unsubGro,unsubTodo,unsubRules,unsubMeals].forEach(u=>u&&u());
-        unsubCal=unsubGro=unsubTodo=unsubRules=unsubMeals=null;
-        calItems=[]; groItems=[]; todoItems=[]; rulesItems=[]; mealMap={};
-        extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set(); extraKnown.rules=new Set();
+        [unsubCal,unsubGro,unsubTodo,unsubRules,unsubMeals,unsubBuc].forEach(u=>u&&u());
+        unsubCal=unsubGro=unsubTodo=unsubRules=unsubMeals=unsubBuc=null;
+        calItems=[]; groItems=[]; todoItems=[]; rulesItems=[]; bucItems=[]; mealMap={};
+        extraKnown.calendar=new Set(); extraKnown.grocery=new Set(); extraKnown.todos=new Set();
+        extraKnown.rules=new Set(); extraKnown.bucket=new Set();
       }
 
       /* ---- view switching ---- */
-      const VIEWS = ['expenses','calendar','grocery','todos','rules','meals'];
+      const VIEWS = ['expenses','calendar','grocery','todos','rules','meals','bucket'];
       function switchView(v){
         curView = v;
         VIEWS.forEach(x=>{ const el=$('#view'+x.charAt(0).toUpperCase()+x.slice(1)); if(el) el.classList.toggle('hidden', x!==v); });
@@ -829,32 +913,49 @@
         if(v==='todos')    renderTodos();
         if(v==='rules')    renderRules();
         if(v==='meals')    renderMeals();
+        if(v==='bucket')   renderBucket();
         window.scrollTo(0,0);
       }
 
       /* ---- calendar (current-month dated list) ---- */
       function renderCalendar(){
-        const now=new Date(), y=now.getFullYear(), m=now.getMonth();
-        $('#calMonth').textContent = now.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
-        const items = calItems
-          .filter(it=>{ const d=parseDate(it.date); return d && d.getFullYear()===y && d.getMonth()===m; })
+        const now=new Date();
+        const todayKey = isoDate(now);
+        const upcoming = calItems
+          .filter(it=> it.date && it.date >= todayKey)
           .sort((a,b)=> a.date<b.date?-1 : a.date>b.date?1 : 0);
+        const past = calItems
+          .filter(it=> it.date && it.date < todayKey)
+          .sort((a,b)=> a.date>b.date?-1 : a.date<b.date?1 : 0);
+        $('#calMonth').textContent = upcoming.length
+          ? `${upcoming.length} upcoming plan${upcoming.length>1?'s':''}`
+          : 'Nothing coming up';
         const host=$('#calList');
-        if(items.length===0){
-          host.innerHTML = `<div class="empty"><div class="ic">🗓️</div><p>No plans this month yet.<br>Tap “Add plan” to note what you’re up to.</p></div>`;
+        if(calItems.length===0){
+          host.innerHTML = `<div class="empty"><div class="ic">🗓️</div><p>No plans yet.<br>Tap “Add plan” to note what you’re up to.</p></div>`;
           return;
         }
-        const groups={};
-        items.forEach(it=>{ (groups[it.date] ||= []).push(it); });
-        host.innerHTML = Object.entries(groups).map(([date,list]) =>
-          `<div class="daygroup"><p class="dayhead">${prettyDate(date)}</p>` +
-          list.map(it=>`<div class="item"><div class="ic">📌</div>
-            <div class="mid"><div class="desc wrap">${esc(it.text)}</div>
-            <div class="meta">Added by ${esc(it.byName||'—')}</div>
-            <button class="del" data-delcal="${it.id}">Delete</button></div></div>`).join('') +
-          `</div>`
-        ).join('');
-        host.querySelectorAll('[data-delcal]').forEach(b=>b.onclick=()=>delExtra('calendar', b.dataset.delcal, true));
+        const groupHTML = (list) => {
+          const groups={};
+          list.forEach(it=>{ (groups[it.date] ||= []).push(it); });
+          return Object.entries(groups).map(([date,items]) =>
+            `<div class="daygroup"><p class="dayhead">${prettyDate(date)}</p>` +
+            items.map(it=>`<div class="item"><div class="ic">📌</div>
+              <div class="mid"><div class="desc wrap">${esc(it.text)}</div>
+              <div class="meta">Added by ${esc(it.byName||'—')}</div>
+              ${delBarHTML('calendar', it)}</div></div>`).join('') +
+            `</div>`
+          ).join('');
+        };
+        let html = upcoming.length ? groupHTML(upcoming)
+          : `<div class="empty" style="padding:6vh 24px"><div class="ic">🗓️</div><p>Nothing coming up.</p></div>`;
+        if(past.length){
+          html += `<div class="clearbar"><button id="calPastBtn">${calShowPast?'Hide':'Show'} past plans (${past.length})</button></div>`;
+          if(calShowPast) html += groupHTML(past);
+        }
+        host.innerHTML = html;
+        wireDelButtons(host);
+        const pb=$('#calPastBtn'); if(pb) pb.onclick=()=>{ calShowPast=!calShowPast; renderCalendar(); };
       }
 
       function openAddPlan(){
@@ -902,10 +1003,10 @@
           list.map(r=>`<div class="item"><div class="ic">${ic}</div>
             <div class="mid"><div class="desc wrap">${esc(r.text)}</div>
             <div class="meta">Added by ${esc(r.byName||'—')}</div>
-            <button class="del" data-delrule="${r.id}">Delete</button></div></div>`).join('') +
+            ${delBarHTML('rules', r)}</div></div>`).join('') +
           `</div>` : '';
         host.innerHTML = block('✅ Do', dos, '💚') + block('🚫 Don’t', donts, '🚫');
-        host.querySelectorAll('[data-delrule]').forEach(b=>b.onclick=()=>delExtra('rules', b.dataset.delrule, true));
+        wireDelButtons(host);
       }
 
       function openAddRule(){
@@ -1029,14 +1130,16 @@
         if(sorted.length===0){ host.innerHTML=`<div class="empty"><div class="ic">${emptyIc}</div><p>${emptyMsg}</p></div>`; return; }
         host.innerHTML = sorted.map(it=>`<div class="check-item${it.done?' done':''}">
           <button class="cbox" data-toggle="${it.id}" aria-label="toggle done">${it.done?'✓':''}</button>
-          <div class="c-mid"><div class="c-text">${esc(it[textField]||'')}</div><div class="c-by">${esc(it.byName||'—')}</div></div>
-          <button class="c-del" data-del="${it.id}" aria-label="delete">✕</button>
+          <div class="c-mid"><div class="c-text">${esc(it[textField]||'')}</div><div class="c-by">${esc(it.byName||'—')}</div>
+            ${it.delReqBy ? delBarHTML(coll, it) : ''}</div>
+          ${it.delReqBy ? '' : `<button class="c-del" data-delreq="${coll}|${it.id}" aria-label="delete">✕</button>`}
         </div>`).join('');
         host.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>toggleDone(coll, b.dataset.toggle, items));
-        host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delExtra(coll, b.dataset.del, false));
+        wireDelButtons(host);
       }
       const renderGrocery = () => renderChecklist('grocery', groItems, '#groList', 'name', '🛒', 'Grocery list is empty.<br>Add items as they run low.');
       const renderTodos   = () => renderChecklist('todos',   todoItems, '#todoList', 'text', '✅', 'No tasks yet.<br>Add something you both need to do.');
+      const renderBucket  = () => renderChecklist('bucket',  bucItems,  '#bucList',  'text', '⭐', 'Bucket list is empty.<br>Add something you both want to do.');
 
       async function addChecklistItem(coll, inputSel, field){
         const inp=$(inputSel); const val=inp.value.trim(); if(!val) return;
@@ -1048,11 +1151,6 @@
         const it=items.find(x=>x.id===id); if(!it) return;
         try{ await updateDoc(doc(db,coll,id), { done: !it.done }); }
         catch(e){ toast('Could not update — try again','⚠️'); }
-      }
-      async function delExtra(coll, id, ask){
-        if(ask && !confirm('Delete this entry?')) return;
-        try{ await deleteDoc(doc(db,coll,id)); }
-        catch(e){ toast('Could not delete — try again','⚠️'); }
       }
       async function clearDone(coll, items){
         const done=items.filter(x=>x.done);
@@ -1073,6 +1171,8 @@
       $('#todoAddBtn').onclick = () => addChecklistItem('todos','#todoInput','text');
       $('#todoInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('todos','#todoInput','text'); });
       $('#todoClear').onclick  = () => clearDone('todos', todoItems);
+      $('#bucAddBtn').onclick  = () => addChecklistItem('bucket','#bucInput','text');
+      $('#bucInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addChecklistItem('bucket','#bucInput','text'); });
 
       onAuthStateChanged(auth, (user) => {
         if(user){ attachExtras(); }
